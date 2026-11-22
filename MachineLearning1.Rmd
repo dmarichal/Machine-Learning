@@ -1,0 +1,119 @@
+---
+title: "Machine Learning"
+author: "Danielle Marichal"
+date: "2026-11-17"
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+library(readr)
+library(car)
+AVONETdataset<- read_csv("AVONET Supplementary dataset 1.csv")
+View(AVONETdataset)
+str(AVONETdataset)
+names(AVONETdataset)
+summary(AVONETdataset)
+AVONETdataset$Trophic.Niche<-as.factor(AVONETdataset$Trophic.Niche)
+AVONETtrimmed<-AVONETdataset[,c("Beak.Length_Culmen","Beak.Length_Nares","Beak.Width","Beak.Depth","Tarsus.Length","Wing.Length","Kipps.Distance","Secondary1","Hand-Wing.Index","Tail.Length","Mass","Trophic.Niche")]
+str(AVONETtrimmed)
+summary(AVONETtrimmed)
+##Assignment 1: Pick any dataset you have used before that has at least five numericpredictor variables, and at least one categorical predictor variable. With this dataset, do the following:
+##Check whether your data are categorical, continuous, or ordinal. 
+#My data is a combination of categorical, continuous, and ordinal
+##Check the correlational structure of your predictor variables.
+#Pearson's corr matrix
+AVONETNUM<-AVONETtrimmed[,1:11]
+AVONETCORR<-cor(AVONETNUM,use = "pairwise.complete.obs")
+AVONETCORR
+#The strongest correlations are Beak.Length_Culmen and Beak.Length_Nares at 0.9709664, Beak.Depth and Beak.Width at 0.9062487, Wing.Length and Secondary1 at 0.9267326, Beak.Length_Culmen and Beak.Width at 0.7442026, Beak.Length_Culmen and Beak.Depth at 0.7141237, Wing.Length and Kipps.Distance at 0.8807724, Tarsus.Length and Secondary1 at 0.80105408, Secondary1 and Tail.Length at 0.78148416, Tarsus.Length and Wing.Length at 0.75820227.
+#Check if your data are linear.
+pairs(AVONETNUM, 
+      panel = function(x,y){
+        points(x,y, cex=0.4,pch=18,col="springgreen")
+        lines(lowess(x,y),col= "black", lwd=2)})
+#The results are not all linear, I utilized a lowess smoothing curve to visualize. Combination of positive and nonlinear results.
+##Check whether your dataset has any data missing.
+colSums(is.na(AVONETtrimmed))
+colMeans(is.na(AVONETtrimmed))*100
+#Trophic niche has 0.09% missing, all my other values are 0
+##Assignment 2: Using the dataset from Assignment 1, perform a principal components analysis.
+#Use the prcomp() function in R, and make sure to center and scale as appropriate.
+PCAanalysis<-prcomp(AVONETNUM,center = TRUE, scale. = TRUE)
+summary(PCAanalysis)
+#Broken stick
+broken_stick<-function(P){
+  sequence<- 1:P
+  divided<- 1/sequence
+  seq_sums<-sapply(sequence,FUN = function(k){
+    subset<- divided[k:P]
+    subset_sum<-sum(subset)
+    i<- subset_sum/P
+    return(i)
+  })
+  return(seq_sums)
+}
+broken_stick(11)
+#for 11 variables
+#Keep in mind you may need to adjust the dataset to ensure it follows the PCA assumptions
+#Choose a cutoff for retained PCs
+#Plot, pairwise, all retained PCs, color coding (or changing the PCH) by one of your categorical predictor variables.
+#Retain only PC1, has 60.15% total variance and 27.45% broken stick, other PC are not variable. I cannot do a pairwiseplot due to the other PC values not being viable.  
+#Explain the rotation and importance of your retained PCs.
+PCAanalysis$rotation[,1]
+#PC1 explained 60.15% of the total variance. All of the output values were negative for PC1, with several contributing the most out of all 11 morphological variables. Wing.Length is -0.3640333, Secondary1 is -0.3521020, Beak.Width is -0.3348063, Beak..Length_Culmen is -0.3343681  and Beak.Depth is -0.3271846 were the largest rotation values. 
+
+PC1<-PCAanalysis$x[,1]
+PC1
+##Assignment 3: Using the dataset from Assignment 1, perform a non-parametric multidimensional scaling analysis.
+#Use the vegan package in R
+library(vegan)
+library(permute)
+#Missing values removal
+AVONETclean<-AVONETtrimmed[!is.na(AVONETtrimmed$Trophic.Niche),]
+#scale
+set.seed(123)
+#Had to shrink down species sample because R kept crashing
+AVONETsubsample<-AVONETclean[
+  sample(nrow(AVONETclean),300),]
+AVONETcleanNPM<-scale(AVONETsubsample[,1:11])
+NPM<-metaMDS(AVONETcleanNPM,distance = "euclidean", k=2,trymax = 50, maxit=500,autotransform = FALSE,trace = 1)
+#I read that adjusting maxit and trymax values can lead to better stress values
+#Keep in mind you may need to adjust the dataset to ensure it follows the NMDS assumptions.
+#Plot the first two NMDS variables and explain any patterns you see in your dataset, color coding (or changing the PCH) by one of your categorical predictor variables
+scoresNPM<-scores(NPM, display = "sites")
+AVONETsubsample$Trophic.Niche<-droplevels(AVONETsubsample$Trophic.Niche)
+colorsforNPM<-as.numeric(AVONETsubsample$Trophic.Niche)
+plot(scoresNPM,cex=0.8,col=colorsforNPM,pch=19,xlab = "NMDS1",ylab = "NMDS2",main = "AVONET Bird Morphological Measurements NMDs")
+legend("bottomleft",legend = levels(AVONETsubsample$Trophic.Niche),col=seq_along(levels(AVONETsubsample$Trophic.Niche)),pch=19,cex=0.4,ncol = 3,bty = "n")
+#Discuss what results you see.
+#NMDS analyses gave an output of 0.03856 for stress value which is significant in showing the differences between the 300 sampled bird species. There is a heavy overlap between different trophic niche categories (Trophic.Niche), forming no distinct clusters 
+##Assignment 4: Using the dataset from Assignment 1, perform a linear discriminant analysis or quadratic discriminant analysis.
+#I choose LDA as a better fit for my data
+#Use the MASS and caret packages in R.
+library(MASS)
+library(caret)
+LDAAVONET<-AVONETsubsample
+LDAAVONET$Trophic.Niche<-as.factor(LDAAVONET$Trophic.Niche)
+LDA<-lda(Trophic.Niche~.,data = LDAAVONET)
+LDA
+predictingLDA<-predict(LDA)
+plot(predictingLDA$x[,1],predictingLDA$x[,2],col=as.numeric(LDAAVONET$Trophic.Niche),pch=19,cex=0.8,xlab = "LD1",ylab = "LD2",main = "AVONET Bird Morphological Measurements LDA")
+legend("bottomright",legend = levels(LDAAVONET$Trophic.Niche),col=seq_along(levels(LDAAVONET$Trophic.Niche)),pch=19,cex=0.4,ncol = 3,bty = "n")
+#Keep in mind you may need to adjust the dataset to ensure it follows the LDA/QDA assumptions.
+#Plot the first two LDA/QDA variables and explain any patterns you see in your dataset, color coding (or changing the PCH) by one of your categorical predictor variables.
+#Substantial overlap within frugivores, invertivores, granivores and aquatic predators. Nectarivores display the most separation. The samples for each group were not even, with herbivorous birds only making up 6 total samples (aquatic and terrestrial herbivores).
+#For both plots R kept crashing whenever I tried to move the legend, had to greatly trim the dataset to even run the plots without R crashing 
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
